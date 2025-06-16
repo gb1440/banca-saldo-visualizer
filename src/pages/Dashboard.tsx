@@ -2,87 +2,116 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, TrendingUp, TrendingDown } from "lucide-react";
-import { AddBalanceModal } from "@/components/AddBalanceModal";
-import { BalanceChart } from "@/components/BalanceChart";
+import { Plus, Building2, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AddCasaModal } from "@/components/AddCasaModal";
+import { AddSaldoModal } from "@/components/AddSaldoModal";
+import { CasasTable } from "@/components/CasasTable";
+import { EvolutionChart } from "@/components/EvolutionChart";
 import { MonthlyChart } from "@/components/MonthlyChart";
-import { BalanceList } from "@/components/BalanceList";
 import { toast } from "@/hooks/use-toast";
-
-interface BalanceEntry {
-  id: string;
-  date: string;
-  casaDeAposta: string;
-  saldo: number;
-  createdAt: Date;
-}
+import { CasaDeAposta, RegistroSaldo, CasaComSaldo } from "@/types";
 
 const Dashboard = () => {
-  const [balances, setBalances] = useState<BalanceEntry[]>([]);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [casas, setCasas] = useState<CasaDeAposta[]>([]);
+  const [registros, setRegistros] = useState<RegistroSaldo[]>([]);
+  const [isAddCasaModalOpen, setIsAddCasaModalOpen] = useState(false);
+  const [isAddSaldoModalOpen, setIsAddSaldoModalOpen] = useState(false);
+  const [casaSelecionadaGrafico, setCasaSelecionadaGrafico] = useState<string>('total');
 
-  // Carregar dados do localStorage na inicialização
+  // Carregar dados do localStorage
   useEffect(() => {
-    const savedBalances = localStorage.getItem('betting-balances');
-    if (savedBalances) {
-      const parsed = JSON.parse(savedBalances);
-      setBalances(parsed.map((b: any) => ({ ...b, createdAt: new Date(b.createdAt) })));
+    const savedCasas = localStorage.getItem('betting-casas');
+    const savedRegistros = localStorage.getItem('betting-registros');
+    
+    if (savedCasas) {
+      const parsed = JSON.parse(savedCasas);
+      setCasas(parsed.map((c: any) => ({ ...c, createdAt: new Date(c.createdAt) })));
+    }
+    
+    if (savedRegistros) {
+      const parsed = JSON.parse(savedRegistros);
+      setRegistros(parsed.map((r: any) => ({ ...r, createdAt: new Date(r.createdAt) })));
     }
   }, []);
 
-  // Salvar dados no localStorage sempre que houver mudanças
+  // Salvar dados no localStorage
   useEffect(() => {
-    localStorage.setItem('betting-balances', JSON.stringify(balances));
-  }, [balances]);
+    localStorage.setItem('betting-casas', JSON.stringify(casas));
+  }, [casas]);
 
-  const addBalance = (entry: Omit<BalanceEntry, 'id' | 'createdAt'>) => {
-    const newEntry: BalanceEntry = {
-      ...entry,
+  useEffect(() => {
+    localStorage.setItem('betting-registros', JSON.stringify(registros));
+  }, [registros]);
+
+  const addCasa = (casaData: Omit<CasaDeAposta, 'id' | 'createdAt'>) => {
+    const newCasa: CasaDeAposta = {
+      ...casaData,
       id: Date.now().toString(),
       createdAt: new Date()
     };
-    setBalances(prev => [newEntry, ...prev]);
+    setCasas(prev => [...prev, newCasa]);
     toast({
-      title: "Saldo adicionado",
-      description: `Saldo de R$ ${entry.saldo.toFixed(2)} para ${entry.casaDeAposta} foi registrado.`,
+      title: "Casa de apostas adicionada",
+      description: `${casaData.nome} foi adicionada com sucesso.`,
     });
   };
 
-  const updateBalance = (id: string, updatedEntry: Partial<BalanceEntry>) => {
-    setBalances(prev => prev.map(entry => 
-      entry.id === id ? { ...entry, ...updatedEntry } : entry
-    ));
+  const addRegistro = (registroData: Omit<RegistroSaldo, 'id' | 'createdAt'>) => {
+    const newRegistro: RegistroSaldo = {
+      ...registroData,
+      id: Date.now().toString(),
+      createdAt: new Date()
+    };
+    setRegistros(prev => [newRegistro, ...prev]);
+    
+    const casa = casas.find(c => c.id === registroData.casaDeApostaId);
     toast({
-      title: "Saldo atualizado",
-      description: "O registro foi atualizado com sucesso.",
+      title: "Saldo registrado",
+      description: `Saldo de R$ ${registroData.saldo.toFixed(2)} registrado para ${casa?.nome}.`,
     });
   };
 
-  const deleteBalance = (id: string) => {
-    setBalances(prev => prev.filter(entry => entry.id !== id));
-    toast({
-      title: "Saldo removido",
-      description: "O registro foi removido com sucesso.",
-    });
-  };
+  // Calcular dados das casas com saldos atuais
+  const casasComSaldo: CasaComSaldo[] = casas.map(casa => {
+    const registrosCasa = registros.filter(r => r.casaDeApostaId === casa.id);
+    
+    if (registrosCasa.length === 0) {
+      return {
+        casa,
+        saldoAtual: 0,
+        ultimaAtualizacao: '',
+        variacao: 0
+      };
+    }
 
-  // Calcular saldo total atual
-  const totalBalance = balances.reduce((sum, entry) => sum + entry.saldo, 0);
+    // Ordenar por data
+    const registrosOrdenados = registrosCasa.sort(
+      (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()
+    );
 
-  // Calcular variação do dia anterior
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  
-  const todayTotal = balances
-    .filter(entry => entry.date === today)
-    .reduce((sum, entry) => sum + entry.saldo, 0);
-  
-  const yesterdayTotal = balances
-    .filter(entry => entry.date === yesterday)
-    .reduce((sum, entry) => sum + entry.saldo, 0);
+    const ultimoRegistro = registrosOrdenados[0];
+    const penultimoRegistro = registrosOrdenados[1];
+    
+    const variacao = penultimoRegistro 
+      ? ultimoRegistro.saldo - penultimoRegistro.saldo 
+      : 0;
 
-  const dailyVariation = todayTotal - yesterdayTotal;
-  const hasLoss = dailyVariation < 0;
+    return {
+      casa,
+      saldoAtual: ultimoRegistro.saldo,
+      ultimaAtualizacao: ultimoRegistro.data,
+      variacao
+    };
+  });
+
+  // Calcular totais
+  const saldoTotal = casasComSaldo.reduce((sum, c) => sum + c.saldoAtual, 0);
+  const variacaoTotal = casasComSaldo.reduce((sum, c) => sum + c.variacao, 0);
+  const casasAtivas = casasComSaldo.filter(c => c.saldoAtual > 0).length;
+  const totalRegistros = registros.length;
+
+  const hasLoss = variacaoTotal < 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -92,12 +121,12 @@ const Dashboard = () => {
             Controle Financeiro - Bancas de Apostas
           </h1>
           <p className="text-gray-600">
-            Gerencie seus saldos e acompanhe a evolução dos seus investimentos
+            Gerencie suas casas de apostas e acompanhe a evolução dos seus investimentos
           </p>
         </div>
 
         {/* Cards de Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className={`${hasLoss ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Saldo Total</CardTitle>
@@ -105,11 +134,11 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${hasLoss ? 'text-red-600' : 'text-green-600'}`}>
-                R$ {totalBalance.toFixed(2)}
+                R$ {saldoTotal.toFixed(2)}
               </div>
-              {dailyVariation !== 0 && (
+              {variacaoTotal !== 0 && (
                 <p className={`text-xs ${hasLoss ? 'text-red-600' : 'text-green-600'}`}>
-                  {dailyVariation > 0 ? '+' : ''}R$ {dailyVariation.toFixed(2)} desde ontem
+                  {variacaoTotal > 0 ? '+' : ''}R$ {variacaoTotal.toFixed(2)} desde a última atualização
                 </p>
               )}
             </CardContent>
@@ -118,50 +147,106 @@ const Dashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Casas Ativas</CardTitle>
+              <Building2 className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {new Set(balances.map(b => b.casaDeAposta)).size}
-              </div>
+              <div className="text-2xl font-bold">{casasAtivas}</div>
               <p className="text-xs text-muted-foreground">
-                Casas de apostas cadastradas
+                {casas.length} casas cadastradas
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Registros</CardTitle>
+              <CardTitle className="text-sm font-medium">Total de Registros</CardTitle>
+              <BarChart3 className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{balances.length}</div>
+              <div className="text-2xl font-bold">{totalRegistros}</div>
               <p className="text-xs text-muted-foreground">
-                Total de entradas
+                Entradas de saldo
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Variação Média</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${variacaoTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {variacaoTotal >= 0 ? '+' : ''}{((variacaoTotal / (saldoTotal || 1)) * 100).toFixed(1)}%
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Baseado na última movimentação
               </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Botão Adicionar */}
-        <div className="mb-8">
+        {/* Botões de Ação */}
+        <div className="flex flex-wrap gap-4 mb-8">
           <Button 
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => setIsAddCasaModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700"
             size="lg"
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Adicionar Saldo
+            <Building2 className="mr-2 h-4 w-4" />
+            Adicionar Casa de Apostas
           </Button>
+          
+          <Button 
+            onClick={() => setIsAddSaldoModalOpen(true)}
+            className="bg-green-600 hover:bg-green-700"
+            size="lg"
+            disabled={casas.length === 0}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar Saldo Diário
+          </Button>
+        </div>
+
+        {/* Tabela de Casas */}
+        <div className="mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Casas de Apostas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <CasasTable casasComSaldo={casasComSaldo} />
+            </CardContent>
+          </Card>
         </div>
 
         {/* Gráficos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <Card>
             <CardHeader>
-              <CardTitle>Evolução Diária</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                Evolução Diária
+                <Select value={casaSelecionadaGrafico} onValueChange={setCasaSelecionadaGrafico}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="total">Saldo Total</SelectItem>
+                    {casas.map(casa => (
+                      <SelectItem key={casa.id} value={casa.id}>
+                        {casa.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <BalanceChart balances={balances} />
+              <EvolutionChart 
+                registros={registros}
+                casas={casas}
+                tipo={casaSelecionadaGrafico === 'total' ? 'total' : 'individual'}
+                casaSelecionada={casaSelecionadaGrafico !== 'total' ? casaSelecionadaGrafico : undefined}
+              />
             </CardContent>
           </Card>
 
@@ -170,30 +255,30 @@ const Dashboard = () => {
               <CardTitle>Resumo Mensal</CardTitle>
             </CardHeader>
             <CardContent>
-              <MonthlyChart balances={balances} />
+              <MonthlyChart balances={registros.map(r => ({
+                id: r.id,
+                date: r.data,
+                casaDeAposta: casas.find(c => c.id === r.casaDeApostaId)?.nome || '',
+                saldo: r.saldo,
+                createdAt: r.createdAt
+              }))} />
             </CardContent>
           </Card>
         </div>
 
-        {/* Lista de Saldos */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Histórico de Saldos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BalanceList 
-              balances={balances}
-              onUpdate={updateBalance}
-              onDelete={deleteBalance}
-            />
-          </CardContent>
-        </Card>
+        {/* Modais */}
+        <AddCasaModal
+          open={isAddCasaModalOpen}
+          onClose={() => setIsAddCasaModalOpen(false)}
+          onAdd={addCasa}
+          casasExistentes={casas}
+        />
 
-        {/* Modal Adicionar Saldo */}
-        <AddBalanceModal
-          open={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onAdd={addBalance}
+        <AddSaldoModal
+          open={isAddSaldoModalOpen}
+          onClose={() => setIsAddSaldoModalOpen(false)}
+          onAdd={addRegistro}
+          casas={casas}
         />
       </div>
     </div>
